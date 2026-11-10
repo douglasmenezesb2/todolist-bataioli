@@ -66,7 +66,7 @@ const daysTo = (k: string) => Math.round((new Date(`${k}T00:00`).getTime() - new
 const rel = (k: string) => { const d = daysTo(k); return d < 0 ? `${-d}d atrasada` : d === 0 ? "Hoje" : d === 1 ? "Amanhã" : `em ${d} dias`; };
 const pastKeys = (t: Task) => {
   const dd = due(t);
-  return dd ? REMINDERS.filter((r) => t.reminders.includes(r.id) && dd.getTime() - r.ms <= Date.now()).map((r) => fireKey(t, r.id)) : [];
+  return dd ? REMINDERS.filter((r) => t.reminders.includes(r["id"]) && dd.getTime() - r["ms"] <= Date.now()).map((r) => fireKey(t, r["id"])) : [];
 };
 
 function load<T>(k: string, fb: T): T {
@@ -81,10 +81,10 @@ const taskToRow = (t: Task) => ({
   priority: t.priority, status: t.status, labels: t.labels, checklist: t.checklist, reminders: t.reminders,
 });
 const taskFromRow = (r: Record<string, unknown>): Task => ({
-  id: String(r.id), title: String(r.title ?? ""), project: String(r.project ?? ""), notes: String(r.notes ?? ""),
-  date: String(r.date ?? ""), time: String(r.time ?? "09:00"), priority: (r.priority as Priority) ?? "media",
-  status: (r.status as Status) ?? "todo", labels: (r.labels as string[]) ?? [], checklist: (r.checklist as CheckItem[]) ?? [],
-  reminders: (r.reminders as string[]) ?? [], kind: r.kind === "afazer" ? "afazer" : "card",
+  id: String(r["id"]), title: String(r["title"] ?? ""), project: String(r["project"] ?? ""), notes: String(r["notes"] ?? ""),
+  date: String(r["date"] ?? ""), time: String(r["time"] ?? "09:00"), priority: (r["priority"] as Priority) ?? "media",
+  status: (r["status"] as Status) ?? "todo", labels: (r["labels"] as string[]) ?? [], checklist: (r["checklist"] as CheckItem[]) ?? [],
+  reminders: (r["reminders"] as string[]) ?? [], kind: r["kind"] === "afazer" ? "afazer" : "card",
 });
 const emptyForm = (date: string, status: Status = "todo", kind: "card" | "afazer" = "card"): Omit<Task, "id"> => ({
   title: "", project: "", notes: "", date: kind === "afazer" ? "" : date, time: "09:00", priority: "media",
@@ -233,11 +233,11 @@ export default function Painel() {
       tasks.forEach((t) => {
         const dd = due(t);
         if (!dd || t.status === "done") return;
-        REMINDERS.filter((r) => t.reminders.includes(r.id)).forEach((r) => {
-          const k = fireKey(t, r.id);
-          if (now >= dd.getTime() - r.ms && now < dd.getTime() && !fired.includes(k) && !nf.includes(k)) {
+        REMINDERS.filter((r) => t.reminders.includes(r["id"])).forEach((r) => {
+          const k = fireKey(t, r["id"]);
+          if (now >= dd.getTime() - r["ms"] && now < dd.getTime() && !fired.includes(k) && !nf.includes(k)) {
             nf.push(k);
-            const text = `${t.title} — ${r.full} (${fmtDT(dd)})`;
+            const text = `${t.title} — ${r["full"]} (${fmtDT(dd)})`;
             na.push({ key: k, text });
             if (typeof Notification !== "undefined" && Notification.permission === "granted") {
               new Notification("Lembrete de tarefa", { body: text });
@@ -269,9 +269,9 @@ export default function Painel() {
     tasks.forEach((t) => {
       const dd = due(t);
       if (!dd || t.status === "done") return;
-      REMINDERS.filter((r) => t.reminders.includes(r.id)).forEach((r) => {
-        const at = new Date(dd.getTime() - r.ms);
-        if (at.getTime() > now) list.push({ t, label: r.full, at });
+      REMINDERS.filter((r) => t.reminders.includes(r["id"])).forEach((r) => {
+        const at = new Date(dd.getTime() - r["ms"]);
+        if (at.getTime() > now) list.push({ t, label: r["full"], at });
       });
     });
     return list.sort((a, b) => a.at.getTime() - b.at.getTime()).slice(0, 40);
@@ -316,7 +316,7 @@ export default function Painel() {
     const base: Task = { ...form, id: editing || uid(), title: form.title.trim() };
     const dd = due(base);
     const past = dd
-      ? REMINDERS.filter((r) => base.reminders.includes(r.id) && dd.getTime() - r.ms <= Date.now()).map((r) => fireKey(base, r.id))
+      ? REMINDERS.filter((r) => base.reminders.includes(r["id"]) && dd.getTime() - r["ms"] <= Date.now()).map((r) => fireKey(base, r["id"]))
       : [];
     setFired((f) => Array.from(new Set([...f, ...past])));
     setTasks((ts) => (editing ? ts.map((t) => (t.id === editing ? base : t)) : [...ts, base]));
@@ -1014,7 +1014,7 @@ export default function Painel() {
                 <label className={lbl}>Lembrar antes {!form.date && <span className="normal-case text-zinc-500">(defina uma data)</span>}</label>
                 <div className="flex flex-wrap gap-2">
                   {REMINDERS.map((r) => (
-                    <button key={r.id} disabled={!form.date} onClick={() => toggleIn("reminders", r.id)} className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition disabled:opacity-30 ${form.reminders.includes(r.id) ? "border-violet-500 bg-violet-600 text-white" : "border-zinc-700 bg-zinc-800 text-zinc-300 hover:border-zinc-500"}`}>{r.label}</button>
+                    <button key={r["id"]} disabled={!form.date} onClick={() => toggleIn("reminders", r["id"])} className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition disabled:opacity-30 ${form.reminders.includes(r["id"]) ? "border-violet-500 bg-violet-600 text-white" : "border-zinc-700 bg-zinc-800 text-zinc-300 hover:border-zinc-500"}`}>{r["label"]}</button>
                   ))}
                 </div>
               </div>
