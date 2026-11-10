@@ -5,7 +5,12 @@ import {
   ClipboardList, ShoppingCart, Package, Hammer, Inbox, Flag, Folder,
   Palette, Compass, Globe, Star, Code, Users, Briefcase, Home, ArrowRight, Sparkles, Sun, Moon, AlertTriangle,
 } from "lucide-react";
-import { Estoque, Mercado, Validades, useCasa, level, CATS } from "@/components/Casa";
+import { Estoque, Mercado, Validades, useCasa, level, CATS, type StockItem, type ShopItem } from "@/components/Casa";
+import { Pessoas } from "@/components/Pessoas";
+import { newId, useSyncedTable } from "@/lib/sync";
+import { supabase } from "@/integrations/supabase/client";
+import { useNavigate } from "@tanstack/react-router";
+import { LogOut, UploadCloud } from "lucide-react";
 
 type Priority = "baixa" | "media" | "alta";
 type Status = "todo" | "doing" | "review" | "done";
@@ -17,7 +22,7 @@ type Task = {
   kind?: "card" | "afazer";
 };
 type Alert = { key: string; text: string };
-type Tab = "home" | "hoje" | "quadro" | "afazeres" | "mercado" | "estoque" | "lembretes";
+type Tab = "home" | "hoje" | "quadro" | "afazeres" | "mercado" | "estoque" | "lembretes" | "pessoas";
 
 const COLS: { id: Status; name: string; dot: string }[] = [
   { id: "todo", name: "Backlog", dot: "bg-zinc-400" },
@@ -56,7 +61,7 @@ const due = (t: Task) => (t.date ? new Date(`${t.date}T${t.time || "09:00"}`) : 
 const fmtDT = (d: Date) => `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 const fmtD = (k: string) => k.split("-").reverse().slice(0, 2).join("/");
 const fireKey = (t: Task, rid: string) => `${t.id}|${rid}|${t.date}|${t.time}`;
-const uid = () => Math.random().toString(36).slice(2, 10);
+const uid = newId;
 const daysTo = (k: string) => Math.round((new Date(`${k}T00:00`).getTime() - new Date(`${toKey(new Date())}T00:00`).getTime()) / 86400e3);
 const rel = (k: string) => { const d = daysTo(k); return d < 0 ? `${-d}d atrasada` : d === 0 ? "Hoje" : d === 1 ? "Amanhã" : `em ${d} dias`; };
 const pastKeys = (t: Task) => {
@@ -70,6 +75,17 @@ function load<T>(k: string, fb: T): T {
 function save(k: string, v: unknown) {
   try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* ignore */ }
 }
+// Cartões (Hoje/Quadro) são de cada pessoa; afazeres são compartilhados — quem decide é a nuvem.
+const taskToRow = (t: Task) => ({
+  id: t.id, kind: t.kind ?? "card", title: t.title, project: t.project, notes: t.notes, date: t.date, time: t.time,
+  priority: t.priority, status: t.status, labels: t.labels, checklist: t.checklist, reminders: t.reminders,
+});
+const taskFromRow = (r: Record<string, unknown>): Task => ({
+  id: String(r.id), title: String(r.title ?? ""), project: String(r.project ?? ""), notes: String(r.notes ?? ""),
+  date: String(r.date ?? ""), time: String(r.time ?? "09:00"), priority: (r.priority as Priority) ?? "media",
+  status: (r.status as Status) ?? "todo", labels: (r.labels as string[]) ?? [], checklist: (r.checklist as CheckItem[]) ?? [],
+  reminders: (r.reminders as string[]) ?? [], kind: r.kind === "afazer" ? "afazer" : "card",
+});
 const emptyForm = (date: string, status: Status = "todo", kind: "card" | "afazer" = "card"): Omit<Task, "id"> => ({
   title: "", project: "", notes: "", date: kind === "afazer" ? "" : date, time: "09:00", priority: "media",
   status, labels: [], checklist: [], reminders: ["1d"], kind,
@@ -90,6 +106,7 @@ const PAGE: Record<string, { desc: string; action: string }> = {
   estoque: { desc: "O que você tem em casa e o que está acabando.", action: "Novo item" },
   mercado: { desc: "Sua lista de compras, alimentada pelo estoque.", action: "Adicionar item" },
   lembretes: { desc: "Avisos programados para as suas tarefas.", action: "" },
+  pessoas: { desc: "Quem pode entrar e ver a parte compartilhada.", action: "" },
 };
 
 const CSS = `
