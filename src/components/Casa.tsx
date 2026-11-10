@@ -46,13 +46,7 @@ const RAW: [string, number, string, string, CatId][] = [
 ];
 const SEED: StockItem[] = RAW.map(([name, qty, note, expiry, cat], i) => ({ id: `s${i}`, name, qty, note, expiry, cat }));
 
-function load<T>(k: string, fb: T): T {
-  try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : fb; } catch { return fb; }
-}
-function save(k: string, v: unknown) {
-  try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* ignore */ }
-}
-const uid = () => Math.random().toString(36).slice(2, 10);
+const uid = newId;
 const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
 const fmt = (k: string) => k.split("-").reverse().join("/");
 
@@ -88,26 +82,33 @@ const panel = "rounded-2xl border border-zinc-800 bg-zinc-900";
 const field = "w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3.5 py-3 text-base text-zinc-100 placeholder:text-zinc-500 outline-none transition focus:border-violet-500 [color-scheme:dark]";
 const lbl = "mb-1.5 block text-xs font-medium uppercase tracking-wider text-zinc-400";
 
+const stockToRow = (s: StockItem) => ({ id: s.id, name: s.name, qty: s.qty, note: s.note, expiry: s.expiry, cat: s.cat });
+const stockFromRow = (r: Record<string, unknown>): StockItem => ({
+  id: String(r.id), name: String(r.name ?? ""), qty: Number(r.qty ?? 0), note: String(r.note ?? ""), expiry: String(r.expiry ?? ""), cat: (r.cat as CatId) ?? "m",
+});
+const shopToRow = (s: ShopItem) => ({ id: s.id, name: s.name, done: s.done, stock_id: s.stockId ?? null });
+const shopFromRow = (r: Record<string, unknown>): ShopItem => ({
+  id: String(r.id), name: String(r.name ?? ""), done: !!r.done, ...(r.stock_id ? { stockId: String(r.stock_id) } : {}),
+});
+
+// Estoque, mercado e preferências ficam na nuvem e são compartilhados por todos.
 export function useCasa() {
-  const [stock, setStock] = useState<StockItem[]>(() => load("stock-v1", SEED));
-  const [shop, setShop] = useState<ShopItem[]>(() => load("shop-v1", []));
-  const [auto, setAuto] = useState<boolean>(() => load("shop-auto", true));
-  const [skip, setSkip] = useState<string[]>(() => load("shop-skip", []));
+  const { items: stock, setItems: setStock, ready: stockReady, localVersion: stockVer } = useSyncedTable("stock_items", stockToRow, stockFromRow);
+  const { items: shop, setItems: setShop, ready: shopReady } = useSyncedTable("shop_items", shopToRow, shopFromRow);
+  const { auto, setAuto, skip, setSkip, ready: setReady } = useHouseSettings();
+  const ready = stockReady && shopReady && setReady;
   const [modal, setModal] = useState<{ id: string | null; f: Draft } | null>(null);
 
-  useEffect(() => save("stock-v1", stock), [stock]);
-  useEffect(() => save("shop-v1", shop), [shop]);
-  useEffect(() => save("shop-auto", auto), [auto]);
-  useEffect(() => save("shop-skip", skip), [skip]);
-
-  // A leitura roda sempre que o estoque muda: o que acabou/está acabando entra na lista
+  // A leitura roda quando o estoque muda aqui (e ao abrir): o que acabou/está acabando entra na lista
   useEffect(() => {
+    if (!ready) return;
     const still = skip.filter((id) => { const s = stock.find((x) => x.id === id); return !!s && needsBuy(s); });
     if (still.length !== skip.length) setSkip(still);
     if (!auto) return;
     const add = stock.filter((s) => needsBuy(s) && !shop.some((x) => x.stockId === s.id) && !skip.includes(s.id));
     if (add.length) setShop((p) => [...p, ...add.map((s) => ({ id: uid(), name: s.name, done: false, stockId: s.id }))]);
-  }, [stock, shop, auto, skip]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, stockVer, auto]);
 
   const suggestions = stock.filter((s) => needsBuy(s) && !shop.some((x) => x.stockId === s.id));
 
@@ -149,7 +150,7 @@ export function useCasa() {
     setModal(null);
   };
 
-  return { stock, shop, auto, setAuto, suggestions, modal, setModal, addShop, toggleShop, removeShop, finishBuy, setQty, removeItem, openItem, saveItem };
+  return { ready, stock, setStock, shop, auto, setAuto, suggestions, modal, setModal, addShop, toggleShop, removeShop, finishBuy, setQty, removeItem, openItem, saveItem };
 }
 export type Casa = ReturnType<typeof useCasa>;
 
