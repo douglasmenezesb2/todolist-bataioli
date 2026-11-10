@@ -61,11 +61,11 @@ const lbl = "mb-1.5 block text-xs font-medium uppercase tracking-wider text-zinc
 
 const stockToRow = (s: StockItem) => ({ id: s.id, name: s.name, qty: s.qty, note: s.note, expiry: s.expiry, cat: s.cat });
 const stockFromRow = (r: Record<string, unknown>): StockItem => ({
-  id: String(r.id), name: String(r.name ?? ""), qty: Number(r.qty ?? 0), note: String(r.note ?? ""), expiry: String(r.expiry ?? ""), cat: (r.cat as CatId) ?? "m",
+  id: String(r["id"]), name: String(r["name"] ?? ""), qty: Number(r["qty"] ?? 0), note: String(r["note"] ?? ""), expiry: String(r["expiry"] ?? ""), cat: (r["cat"] as CatId) ?? "m",
 });
 const shopToRow = (s: ShopItem) => ({ id: s.id, name: s.name, done: s.done, stock_id: s.stockId ?? null });
 const shopFromRow = (r: Record<string, unknown>): ShopItem => ({
-  id: String(r.id), name: String(r.name ?? ""), done: !!r.done, ...(r.stock_id ? { stockId: String(r.stock_id) } : {}),
+  id: String(r["id"]), name: String(r["name"] ?? ""), done: !!r["done"], ...(r["stock_id"] ? { stockId: String(r["stock_id"]) } : {}),
 });
 
 // Estoque, mercado e preferências ficam na nuvem e são compartilhados por todos.
@@ -127,7 +127,7 @@ export function useCasa() {
     setModal(null);
   };
 
-  return { ready, stock, setStock, shop, auto, setAuto, suggestions, modal, setModal, addShop, toggleShop, removeShop, finishBuy, setQty, removeItem, openItem, saveItem };
+  return { ready, stock, setStock, shop, setShop, auto, setAuto, suggestions, modal, setModal, addShop, toggleShop, removeShop, finishBuy, setQty, removeItem, openItem, saveItem };
 }
 export type Casa = ReturnType<typeof useCasa>;
 
