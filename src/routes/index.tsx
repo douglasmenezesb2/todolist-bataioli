@@ -1,23 +1,25 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { ClientOnly, createFileRoute } from "@tanstack/react-router";
+import Painel from "@/components/Painel";
 
-// The home route ships no og:image, so serve-time hosting can inject the
-// project's social preview (explicit og:image or latest screenshot).
 export const Route = createFileRoute("/")({
+  head: () => ({
+    meta: [
+      { title: "Painel — Tarefas, Estoque e Mercado" },
+      { name: "description", content: "Organize tarefas, lembretes, estoque da casa, validades e lista de mercado em um só lugar." },
+      { property: "og:title", content: "Painel — Tarefas, Estoque e Mercado" },
+      { property: "og:description", content: "Organize tarefas, lembretes, estoque da casa, validades e lista de mercado em um só lugar." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+    ],
+  }),
   component: Index,
 });
 
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
+// Os dados ficam salvos no navegador, então a tela só é montada no cliente.
 function Index() {
   return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
-    </div>
+    <ClientOnly fallback={<div className="min-h-screen bg-background" />}>
+      <Painel />
+    </ClientOnly>
   );
 }
