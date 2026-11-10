@@ -5,7 +5,12 @@ import {
   ClipboardList, ShoppingCart, Package, Hammer, Inbox, Flag, Folder,
   Palette, Compass, Globe, Star, Code, Users, Briefcase, Home, ArrowRight, Sparkles, Sun, Moon, AlertTriangle,
 } from "lucide-react";
-import { Estoque, Mercado, Validades, useCasa, level, CATS } from "@/components/Casa";
+import { Estoque, Mercado, Validades, useCasa, level, CATS, type StockItem, type ShopItem } from "@/components/Casa";
+import { Pessoas } from "@/components/Pessoas";
+import { newId, useSyncedTable } from "@/lib/sync";
+import { supabase } from "@/integrations/supabase/client";
+import { useNavigate } from "@tanstack/react-router";
+import { LogOut, UploadCloud } from "lucide-react";
 
 type Priority = "baixa" | "media" | "alta";
 type Status = "todo" | "doing" | "review" | "done";
@@ -17,7 +22,7 @@ type Task = {
   kind?: "card" | "afazer";
 };
 type Alert = { key: string; text: string };
-type Tab = "home" | "hoje" | "quadro" | "afazeres" | "mercado" | "estoque" | "lembretes";
+type Tab = "home" | "hoje" | "quadro" | "afazeres" | "mercado" | "estoque" | "lembretes" | "pessoas";
 
 const COLS: { id: Status; name: string; dot: string }[] = [
   { id: "todo", name: "Backlog", dot: "bg-zinc-400" },
@@ -56,7 +61,7 @@ const due = (t: Task) => (t.date ? new Date(`${t.date}T${t.time || "09:00"}`) : 
 const fmtDT = (d: Date) => `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 const fmtD = (k: string) => k.split("-").reverse().slice(0, 2).join("/");
 const fireKey = (t: Task, rid: string) => `${t.id}|${rid}|${t.date}|${t.time}`;
-const uid = () => Math.random().toString(36).slice(2, 10);
+const uid = newId;
 const daysTo = (k: string) => Math.round((new Date(`${k}T00:00`).getTime() - new Date(`${toKey(new Date())}T00:00`).getTime()) / 86400e3);
 const rel = (k: string) => { const d = daysTo(k); return d < 0 ? `${-d}d atrasada` : d === 0 ? "Hoje" : d === 1 ? "Amanhã" : `em ${d} dias`; };
 const pastKeys = (t: Task) => {
@@ -70,6 +75,17 @@ function load<T>(k: string, fb: T): T {
 function save(k: string, v: unknown) {
   try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* ignore */ }
 }
+// Cartões (Hoje/Quadro) são de cada pessoa; afazeres são compartilhados — quem decide é a nuvem.
+const taskToRow = (t: Task) => ({
+  id: t.id, kind: t.kind ?? "card", title: t.title, project: t.project, notes: t.notes, date: t.date, time: t.time,
+  priority: t.priority, status: t.status, labels: t.labels, checklist: t.checklist, reminders: t.reminders,
+});
+const taskFromRow = (r: Record<string, unknown>): Task => ({
+  id: String(r.id), title: String(r.title ?? ""), project: String(r.project ?? ""), notes: String(r.notes ?? ""),
+  date: String(r.date ?? ""), time: String(r.time ?? "09:00"), priority: (r.priority as Priority) ?? "media",
+  status: (r.status as Status) ?? "todo", labels: (r.labels as string[]) ?? [], checklist: (r.checklist as CheckItem[]) ?? [],
+  reminders: (r.reminders as string[]) ?? [], kind: r.kind === "afazer" ? "afazer" : "card",
+});
 const emptyForm = (date: string, status: Status = "todo", kind: "card" | "afazer" = "card"): Omit<Task, "id"> => ({
   title: "", project: "", notes: "", date: kind === "afazer" ? "" : date, time: "09:00", priority: "media",
   status, labels: [], checklist: [], reminders: ["1d"], kind,
@@ -90,6 +106,7 @@ const PAGE: Record<string, { desc: string; action: string }> = {
   estoque: { desc: "O que você tem em casa e o que está acabando.", action: "Novo item" },
   mercado: { desc: "Sua lista de compras, alimentada pelo estoque.", action: "Adicionar item" },
   lembretes: { desc: "Avisos programados para as suas tarefas.", action: "" },
+  pessoas: { desc: "Quem pode entrar e ver a parte compartilhada.", action: "" },
 };
 
 const CSS = `
@@ -139,7 +156,39 @@ const lbl = "mb-1.5 block text-xs font-medium uppercase tracking-wider text-zinc
 
 export default function Painel() {
   const today = new Date();
-  const [tasks, setTasks] = useState<Task[]>(() => load("tasks-v2", []));
+  const { items: tasks, setItems: setTasks } = useSyncedTable<Task>("tasks", taskToRow, taskFromRow);
+  const navigate = useNavigate();
+  const [me, setMe] = useState<{ email: string; admin: boolean }>({ email: "", admin: false });
+  const [localData, setLocalData] = useState<{ tasks: Task[]; stock: StockItem[]; shop: ShopItem[] } | null>(null);
+  useEffect(() => {
+    void (async () => {
+      const { data } = await supabase.auth.getUser();
+      const u = data.user;
+      if (!u) return;
+      const { data: admin } = await supabase.rpc("has_role", { _user_id: u.id, _role: "admin" });
+      setMe({ email: u.email ?? "", admin: !!admin });
+    })();
+    // Dados antigos deste aparelho, de antes de salvar na nuvem
+    if (!localStorage.getItem("cloud-imported-v1")) {
+      const t = load<Task[]>("tasks-v2", []), s = load<StockItem[]>("stock-v1", []), sh = load<ShopItem[]>("shop-v1", []);
+      if (t.length || s.length || sh.length) setLocalData({ tasks: t, stock: s, shop: sh });
+    }
+  }, []);
+  const signOut = async () => {
+    await supabase.auth.signOut();
+    navigate({ to: "/auth", replace: true });
+  };
+  const importLocal = (withHouse: boolean) => {
+    if (!localData) return;
+    setTasks((ts) => [...ts, ...localData.tasks.filter((t) => !ts.some((x) => x.id === t.id)).map((t) => ({ ...t, kind: t.kind ?? "card" }))]);
+    if (withHouse) {
+      if (localData.stock.length) casa.setStock(localData.stock);
+      if (localData.shop.length) casa.setShop(localData.shop);
+    }
+    localStorage.setItem("cloud-imported-v1", "1");
+    setLocalData(null);
+  };
+  const dismissLocal = () => { localStorage.setItem("cloud-imported-v1", "1"); setLocalData(null); };
   const [fired, setFired] = useState<string[]>(() => load("tasks-v2-fired", []));
   const [selected, setSelected] = useState(toKey(today));
   const [month, setMonth] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
@@ -163,7 +212,7 @@ export default function Painel() {
     document.body.style.background = theme === "light" ? "#f1f5f9" : "#09090b";
     document.documentElement.style.colorScheme = theme;
   }, [theme]);
-  const curName = tab === "home" ? "Visão geral" : tab === "lembretes" ? "Lembretes" : TABS.find((t) => t[0] === tab)?.[1];
+  const curName = tab === "home" ? "Visão geral" : tab === "lembretes" ? "Lembretes" : tab === "pessoas" ? "Pessoas" : TABS.find((t) => t[0] === tab)?.[1];
   const navBtn = (id: Tab, name: string, Icon: typeof Home, badge = 0) => (
     <button key={id} onClick={() => setTab(id)} className={`group flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium transition ${tab === id ? "bg-white/10 text-white" : "text-slate-300 hover:bg-white/5 hover:text-slate-100"}`}>
       <Icon className={`h-[18px] w-[18px] ${tab === id ? "text-[#c4b5fd]" : ""}`} />
@@ -173,7 +222,6 @@ export default function Painel() {
     </button>
   );
 
-  useEffect(() => save("tasks-v2", tasks), [tasks]);
   useEffect(() => save("tasks-v2-fired", fired), [fired]);
 
   // Lembretes
@@ -330,10 +378,11 @@ export default function Painel() {
           ))}
           <div className="px-3 pb-1.5 pt-5 text-[11px] font-semibold tracking-[0.18em] text-slate-500">SISTEMA</div>
           {navBtn("lembretes", "Lembretes", Bell, upcoming.length)}
+          {me.admin && navBtn("pessoas", "Pessoas", Users)}
         </nav>
         <div className="m-3 rounded-2xl border border-white/10 bg-white/5 p-4">
           <div className="mb-1.5 flex items-center gap-2 text-sm font-semibold text-slate-100"><Sparkles className="h-4 w-4 text-[#c4b5fd]" /> Leitura automática</div>
-          <p className="text-xs leading-relaxed text-slate-400">O que acabar no estoque entra sozinho na lista de compras. Seus dados ficam salvos neste navegador.</p>
+          <p className="text-xs leading-relaxed text-slate-400">O que acabar no estoque entra sozinho na lista de compras. Estoque, mercado e afazeres são compartilhados com todos da casa.</p>
         </div>
       </aside>
 
@@ -358,16 +407,20 @@ export default function Painel() {
               {upcoming.length > 0 && <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-violet-600 px-1 text-[10px] font-bold text-white">{Math.min(upcoming.length, 9)}</span>}
             </button>
             <div className="ml-1 hidden items-center gap-3 border-l border-zinc-800 pl-4 sm:flex">
-              <div className="text-right leading-tight"><div className="text-sm font-bold">Meu espaço</div><div className="text-xs text-zinc-400">Dados neste aparelho</div></div>
-              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-300 text-sm font-bold text-amber-900">EU</span>
+              <div className="max-w-[12rem] text-right leading-tight"><div className="text-sm font-bold">Meu espaço</div><div className="truncate text-xs text-zinc-400">{me.email || "Salvo na nuvem"}</div></div>
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-300 text-sm font-bold uppercase text-amber-900">{(me.email || "eu").slice(0, 2)}</span>
             </div>
+            {me.admin && (
+              <button onClick={() => setTab("pessoas")} aria-label="Pessoas" title="Pessoas" className={`rounded-xl border p-2.5 transition active:scale-90 md:hidden ${tab === "pessoas" ? "border-violet-500 bg-violet-600 text-white" : "border-zinc-700 bg-zinc-900 text-zinc-300"}`}><Users className="h-4 w-4" /></button>
+            )}
+            <button onClick={() => void signOut()} aria-label="Sair" title="Sair" className="rounded-xl border border-zinc-700 bg-zinc-900 p-2.5 text-zinc-300 transition hover:border-rose-500 hover:text-rose-400 active:scale-90"><LogOut className="h-4 w-4" /></button>
           </div>
         </header>
 
       <main className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-7xl px-4 pb-28 pt-6 md:px-8 md:pb-10">
         {tab !== "home" && (() => {
-          const cur = tab === "lembretes" ? (["lembretes", "Lembretes", Bell] as const) : TABS.find((t) => t[0] === tab);
+          const cur = tab === "lembretes" ? (["lembretes", "Lembretes", Bell] as const) : tab === "pessoas" ? (["pessoas", "Pessoas", Users] as const) : TABS.find((t) => t[0] === tab);
           if (!cur) return null;
           const CurIcon = cur[2];
           const pg = PAGE[tab];
@@ -383,6 +436,20 @@ export default function Painel() {
             </div>
           );
         })()}
+        {tab === "home" && localData && (
+          <div className="a-up mb-5 flex flex-col gap-3 rounded-2xl border border-violet-500 bg-zinc-900 p-4 sm:flex-row sm:items-center">
+            <UploadCloud className="h-6 w-6 shrink-0 text-violet-400" />
+            <div className="flex-1 text-sm">
+              <div className="font-semibold">Encontramos dados salvos só neste aparelho</div>
+              <div className="text-zinc-400">{localData.tasks.length} tarefas, {localData.stock.length} itens de estoque e {localData.shop.length} na lista de mercado. Quer enviar para a nuvem?</div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={() => importLocal(false)} className="rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-xs font-semibold hover:border-violet-500">Só minhas tarefas</button>
+              <button onClick={() => confirm("Isso troca o estoque e a lista de mercado de todos pelos deste aparelho. Continuar?") && importLocal(true)} className="rounded-xl bg-violet-600 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-500">Tarefas + estoque e mercado</button>
+              <button onClick={dismissLocal} className="rounded-xl px-3 py-2 text-xs text-zinc-400 hover:text-zinc-200">Ignorar</button>
+            </div>
+          </div>
+        )}
         {tab === "home" && (() => {
           const hr = today.getHours();
           const tk = toKey(today);
@@ -578,7 +645,7 @@ export default function Painel() {
                   )}
                 </div>
               </div>
-              <p className="mt-8 text-center text-xs text-zinc-500">Minhas tarefas • seus dados ficam salvos neste navegador</p>
+              <p className="mt-8 text-center text-xs text-zinc-500">Minhas tarefas • salvo na nuvem, disponível em qualquer aparelho</p>
             </div>
           );
         })()}
@@ -853,6 +920,7 @@ export default function Painel() {
           </section>
         )}
         {tab === "lembretes" && <Validades casa={casa} />}
+        {tab === "pessoas" && me.admin && <Pessoas />}
       </div></main></div>
 
       {tab !== "lembretes" && (

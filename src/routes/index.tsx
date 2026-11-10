@@ -1,7 +1,9 @@
-import { ClientOnly, createFileRoute } from "@tanstack/react-router";
-import Painel from "@/components/Painel";
+import { createFileRoute, redirect } from "@tanstack/react-router";
+import { supabase } from "@/integrations/supabase/client";
 
+// Entrada: quem já entrou vai para o painel; quem não entrou vai para o login.
 export const Route = createFileRoute("/")({
+  ssr: false,
   head: () => ({
     meta: [
       { title: "Painel — Tarefas, Estoque e Mercado" },
@@ -12,14 +14,9 @@ export const Route = createFileRoute("/")({
       { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
-  component: Index,
+  beforeLoad: async () => {
+    const { data } = await supabase.auth.getUser();
+    throw redirect({ to: data.user ? "/painel" : "/auth", replace: true });
+  },
+  component: () => <div className="min-h-screen bg-background" />,
 });
-
-// Os dados ficam salvos no navegador, então a tela só é montada no cliente.
-function Index() {
-  return (
-    <ClientOnly fallback={<div className="min-h-screen bg-background" />}>
-      <Painel />
-    </ClientOnly>
-  );
-}
