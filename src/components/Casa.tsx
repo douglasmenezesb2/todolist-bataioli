@@ -63,7 +63,7 @@ export function level(s: StockItem): Level {
   const n = s.note.toLowerCase();
   if (/acabando|pouco|quase/.test(n)) return "low";
   const f = n.match(/(\d+)\s*\/\s*(\d+)/);
-  if (f) { const r = +f[1] / +f[2]; return r <= 0.34 ? "low" : r <= 0.67 ? "mid" : "ok"; }
+  if (f) { const r = Number(f[1] ?? 0) / Number(f[2] ?? 1); return r <= 0.34 ? "low" : r <= 0.67 ? "mid" : "ok"; }
   if (/metade/.test(n)) return "mid";
   return "ok";
 }
@@ -117,7 +117,7 @@ export function useCasa() {
     const st = stock.find((s) => norm(s.name) === norm(n));
     if (shop.some((x) => norm(x.name) === norm(st ? st.name : n))) return;
     if (st) setSkip((k) => k.filter((i) => i !== st.id));
-    setShop((p) => [...p, { id: uid(), name: st ? st.name : n, done: false, stockId: st?.id }]);
+    setShop((p) => [...p, { id: uid(), name: st ? st.name : n, done: false, ...(st ? { stockId: st.id } : {}) }]);
   };
   const toggleShop = (id: string) => setShop((p) => p.map((x) => (x.id === id ? { ...x, done: !x.done } : x)));
   const removeShop = (id: string) => {
