@@ -436,6 +436,20 @@ export default function Painel() {
             </div>
           );
         })()}
+        {tab === "home" && localData && (
+          <div className="a-up mb-5 flex flex-col gap-3 rounded-2xl border border-violet-500 bg-zinc-900 p-4 sm:flex-row sm:items-center">
+            <UploadCloud className="h-6 w-6 shrink-0 text-violet-400" />
+            <div className="flex-1 text-sm">
+              <div className="font-semibold">Encontramos dados salvos só neste aparelho</div>
+              <div className="text-zinc-400">{localData.tasks.length} tarefas, {localData.stock.length} itens de estoque e {localData.shop.length} na lista de mercado. Quer enviar para a nuvem?</div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={() => importLocal(false)} className="rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-2 text-xs font-semibold hover:border-violet-500">Só minhas tarefas</button>
+              <button onClick={() => confirm("Isso troca o estoque e a lista de mercado de todos pelos deste aparelho. Continuar?") && importLocal(true)} className="rounded-xl bg-violet-600 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-500">Tarefas + estoque e mercado</button>
+              <button onClick={dismissLocal} className="rounded-xl px-3 py-2 text-xs text-zinc-400 hover:text-zinc-200">Ignorar</button>
+            </div>
+          </div>
+        )}
         {tab === "home" && (() => {
           const hr = today.getHours();
           const tk = toKey(today);
