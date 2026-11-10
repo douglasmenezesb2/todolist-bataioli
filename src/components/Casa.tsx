@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { LucideIcon } from "lucide-react";
+import { newId, useHouseSettings, useSyncedTable } from "@/lib/sync";
 import {
   AlertTriangle, Brush, CalendarDays, Check, Droplets, Home, Minus, Package,
   PawPrint, Pencil, Plus, Search, ShoppingCart, Sparkles, Trash2, TrendingDown, Utensils, X,
@@ -21,30 +22,6 @@ export const CATS: Record<CatId, { name: string; Icon: LucideIcon; cls: string }
 const ORDER: CatId[] = ["m", "c", "l", "h", "p"];
 const NOTES = ["Fechado", "Aberto", "Cheio", "Metade", "3/4", "2/3", "1/3", "Acabando"];
 
-// Estoque inicial (importado do seu PDF)
-const RAW: [string, number, string, string, CatId][] = [
-  ["Nescau lata", 1, "2/3", "2026-05-01", "m"], ["Leite em pó", 1, "Acabando", "2027-04-14", "m"],
-  ["Leite condensado", 2, "1 Aberto", "", "m"], ["Creme de leite", 3, "", "", "m"],
-  ["Batata palha", 2, "Fechado", "", "m"], ["Fermento pão", 2, "Fechado", "2027-01-23", "m"],
-  ["Massa", 2, "", "", "m"], ["Chá preto", 4, "Fechado", "", "m"], ["Café", 2, "Fechado", "", "m"],
-  ["Amido de milho", 1, "Acabando", "2027-07-02", "m"], ["Fermento", 2, "4 Fechado", "2027-06-01", "m"],
-  ["Maionese", 0, "", "", "m"], ["Milho para pipoca", 1, "Fechado", "2027-02-06", "m"],
-  ["Sal grosso", 2, "1 Fechado", "2027-11-01", "m"], ["Erva-mate", 1, "Fechado", "", "m"],
-  ["Polenta", 1, "Fechado", "2026-11-01", "m"], ["Feijão", 1, "3/4", "", "m"], ["Arroz", 0, "", "", "m"],
-  ["Óleo de soja", 1, "Cheio", "", "m"], ["Azeite", 1, "Cheio", "", "m"], ["Vinagre", 1, "1/3", "", "m"],
-  ["Molho shoyu", 1, "Metade", "2027-01-01", "m"], ["Farinha", 1, "Fechado", "", "m"],
-  ["Aveia", 1, "Metade", "", "m"], ["Magic Toast", 0, "", "", "m"], ["Sal", 1, "Metade", "", "m"],
-  ["Pão", 1, "Acabando", "", "m"], ["Ketchup", 1, "Aberto", "", "m"], ["Iogurte", 0, "", "", "m"],
-  ["Papel filme", 2, "1 Fechado", "", "c"], ["Papel alumínio", 1, "Aberto", "", "c"],
-  ["Filtro de café", 1, "Acabando", "", "c"], ["Papel toalha", 2, "", "", "c"],
-  ["Superbonder", 0, "", "", "c"], ["Lixo pia", 0, "", "", "c"], ["Lixo cozinha", 1, "", "", "c"],
-  ["Tapete Polar", 1, "", "", "c"],
-  ["Detergente", 1, "", "", "l"], ["Lava-roupas", 1, "", "", "l"], ["Álcool", 1, "", "", "l"],
-  ["Desinfetante Veja", 1, "", "", "l"], ["Esponja Banho", 1, "", "", "l"],
-  ["Sabonete", 2, "", "", "h"], ["Shampoo", 1, "", "", "h"], ["Condicionador", 1, "", "", "h"],
-  ["Sachê cachorro", 2, "Fechado", "2028-01-01", "p"], ["Ração", 1, "", "", "p"],
-];
-const SEED: StockItem[] = RAW.map(([name, qty, note, expiry, cat], i) => ({ id: `s${i}`, name, qty, note, expiry, cat }));
 
 const uid = newId;
 const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
