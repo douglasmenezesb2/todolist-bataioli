@@ -28,3 +28,5 @@ use the editor.
   own key and store it in Secrets.
 - **Secrets.** Lovable manages them. Do not put secret values in the repo.
 <!-- LOVABLE:END -->
+
+- The main screen (`src/components/Painel.tsx` + `Casa.tsx`) is rendered inside `<ClientOnly>` on `/` — its state is read from localStorage at init, so SSR would mismatch.
